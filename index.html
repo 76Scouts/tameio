@@ -623,5 +623,45 @@ const vc=$('#vChg'); if(vc)vc.onclick=()=>{ showLanding(); };
 })();
 </script>
 
+<!-- ═══════════════════════════════════════════════════════════════
+     ΤΑΜΕΙΟ 76 — patch v17: αλλαγή ΤΑΜΕΙΟΥ μέσω edit (αν περάστηκε λάθος)
+     ΜΠΑΙΝΕΙ: πριν το </body> του index.html (repo tameio). Το backend
+     (action=update) ήδη δέχεται fund — απλώς το edit δεν το ζητούσε.
+     ═══════════════════════════════════════════════════════════════ -->
+<script>
+/* patch v17 */
+editRow = async function(row){
+  var it = (GRID.items||[]).find(function(x){ return x.row===row && x.src==='in'; }); if(!it) return;
+  var code = ensureCode(); if(!code){ toast('Χρειάζεται κωδικός',true); return; }
+  var amt = prompt('Ποσό (€):', it.amount); if(amt===null) return;
+  var cur = (it.label==='Έσοδο'||it.label==='Έσοδο (ειδικό)') ? '' : it.label;
+  var note = prompt('Περιγραφή:', cur); if(note===null) return;
+
+  /* ΝΕΟ — αλλαγή ταμείου (π.χ. αν περάστηκε σε λάθος τμήμα) */
+  var funds = (typeof state!=='undefined' && state.funds && state.funds.length) ? state.funds : (GRID.funds||[]);
+  var fund = it.fund;
+  if(funds.length){
+    var list = funds.map(function(f,i){ return (i+1)+') '+f; }).join('\n');
+    var curIdx = funds.indexOf(it.fund);
+    var pick = prompt('Ταμείο — δώσε αριθμό (κενό = ίδιο: '+it.fund+'):\n'+list, curIdx>=0 ? String(curIdx+1) : '');
+    if(pick===null) return;
+    pick = (''+pick).trim();
+    if(pick){
+      var n = parseInt(pick,10);
+      if(n>=1 && n<=funds.length) fund = funds[n-1];
+      else { toast('Άκυρος αριθμός ταμείου',true); return; }
+    }
+  }
+
+  try{
+    var r = await apiPost({ action:'update', key:code, year:$('#mYear').value||curScoutYear(), row:row, amount:parseFloat(amt)||0, note:note, fund:fund });
+    if(r&&r.ok) toast('Ενημερώθηκε ✓');
+    else if(r&&r.error==='auth'){ AUTH=''; toast('Λάθος κωδικός',true); }
+    else toast('Σφάλμα',true);
+  }catch(err){ toast('Σφάλμα',true); }
+  loadGrid();
+};
+</script>
+
 </body>
 </html>
