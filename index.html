@@ -663,5 +663,99 @@ editRow = async function(row){
 };
 </script>
 
+<!-- ═══════════════════════════════════════════════════════════════
+     ΤΑΜΕΙΟ 76 — patch v18
+     (α) edit/διαγραφή ενημερώνουν ΜΟΝΟ την εγγραφή — ΟΧΙ reload όλης της σελίδας
+     (β) το edit αλλάζει και ταμείο (διατηρεί το v17)
+     (γ) διακριτικό version badge με ημερομηνία build
+     ΜΠΑΙΝΕΙ: πριν το </body> του index.html (repo tameio).
+     ═══════════════════════════════════════════════════════════════ -->
+<script>
+/* patch v18 */
+(function(){
+  var BUILD = 'v18 · 2026-09-09';
+
+  /* Ξαναϋπολογίζει funds/totals τοπικά (ίδια λογική με το backend gridData_) */
+  function recalcGrid(){
+    var items = (typeof GRID!=='undefined' && GRID.items) ? GRID.items : [];
+    var order = (typeof state!=='undefined' && state.funds && state.funds.length) ? state.funds : [];
+    var seen={}, funds=[], totals={};
+    items.forEach(function(it){
+      var f = it.fund;
+      if(!seen[f]){ seen[f]=1; funds.push(f); totals[f]={income:0,expense:0,total:0}; }
+      if(it.sign>0) totals[f].income += it.amount; else totals[f].expense += it.amount;
+    });
+    funds.sort(function(a,b){ var ia=order.indexOf(a), ib=order.indexOf(b); if(ia<0)ia=999; if(ib<0)ib=999; return ia-ib; });
+    funds.forEach(function(f){ var t=totals[f];
+      t.income=Math.round(t.income*100)/100; t.expense=Math.round(t.expense*100)/100;
+      t.total=Math.round((t.income-t.expense)*100)/100; });
+    GRID.funds=funds; GRID.totals=totals;
+  }
+  function repaint(){
+    try{ recalcGrid(); renderGrid(); }
+    catch(e){ try{ renderEditList(); }catch(e2){} }
+  }
+
+  /* ── ΔΙΑΓΡΑΦΗ: τοπική αφαίρεση + διόρθωση row (το Sheet ανεβάζει τις από κάτω) ── */
+  delRow = async function(row){
+    var code = ensureCode(); if(!code){ toast('Χρειάζεται κωδικός',true); return; }
+    if(!confirm('Διαγραφή αυτού του εσόδου;')) return;
+    try{
+      var r = await apiPost({ action:'delete', key:code, year:$('#mYear').value||curScoutYear(), row:row });
+      if(r&&r.ok){
+        GRID.items = (GRID.items||[]).filter(function(it){ return !(it.src==='in' && it.row===row); });
+        (GRID.items||[]).forEach(function(it){ if(it.src==='in' && it.row>row) it.row--; });
+        repaint(); toast('Διαγράφηκε ✓');
+      }
+      else if(r&&r.error==='auth'){ AUTH=''; toast('Λάθος κωδικός',true); }
+      else toast('Σφάλμα',true);
+    }catch(err){ toast('Σφάλμα',true); }
+  };
+
+  /* ── ΕΠΕΞΕΡΓΑΣΙΑ: ποσό + περιγραφή + ταμείο· ενημερώνει μόνο τη γραμμή ── */
+  editRow = async function(row){
+    var it = (GRID.items||[]).find(function(x){ return x.row===row && x.src==='in'; }); if(!it) return;
+    var code = ensureCode(); if(!code){ toast('Χρειάζεται κωδικός',true); return; }
+    var amt = prompt('Ποσό (€):', it.amount); if(amt===null) return;
+    var cur = (it.label==='Έσοδο'||it.label==='Έσοδο (ειδικό)') ? '' : it.label;
+    var note = prompt('Περιγραφή:', cur); if(note===null) return;
+
+    var funds = (typeof state!=='undefined' && state.funds && state.funds.length) ? state.funds : (GRID.funds||[]);
+    var fund = it.fund;
+    if(funds.length){
+      var list = funds.map(function(f,i){ return (i+1)+') '+f; }).join('\n');
+      var ci = funds.indexOf(it.fund);
+      var pick = prompt('Ταμείο — αριθμός (κενό = ίδιο: '+it.fund+'):\n'+list, ci>=0?String(ci+1):'');
+      if(pick===null) return;
+      pick = (''+pick).trim();
+      if(pick){ var n=parseInt(pick,10);
+        if(n>=1 && n<=funds.length) fund=funds[n-1];
+        else { toast('Άκυρος αριθμός ταμείου',true); return; } }
+    }
+
+    try{
+      var r = await apiPost({ action:'update', key:code, year:$('#mYear').value||curScoutYear(), row:row,
+                              amount:parseFloat(amt)||0, note:note, fund:fund });
+      if(r&&r.ok){
+        it.amount = parseFloat(amt)||0;
+        it.fund   = fund;
+        it.label  = note ? note : (it.type==='Ειδικό' ? 'Έσοδο (ειδικό)' : 'Έσοδο');
+        repaint(); toast('Ενημερώθηκε ✓');
+      }
+      else if(r&&r.error==='auth'){ AUTH=''; toast('Λάθος κωδικός',true); }
+      else toast('Σφάλμα',true);
+    }catch(err){ toast('Σφάλμα',true); }
+  };
+
+  /* ── version badge ── */
+  try{
+    var vb=document.createElement('div');
+    vb.style.cssText='max-width:1040px;margin:4px auto 22px;padding:0 16px;font-size:11.5px;color:#64748b;text-align:right';
+    vb.textContent='Ταμείο 76 · '+BUILD;
+    document.body.appendChild(vb);
+  }catch(e){}
+})();
+</script>
+
 </body>
 </html>
