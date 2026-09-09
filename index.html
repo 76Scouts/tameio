@@ -560,5 +560,68 @@ const vc=$('#vChg'); if(vc)vc.onclick=()=>{ showLanding(); };
     history.replaceState(null,"",u.pathname+(q?"?"+q:"")+u.hash); }
 }catch(e){}})();
 </script>
+<!-- ═══════════════════════════════════════════════════════════════
+     ΤΑΜΕΙΟ 76 — patch v16: φίλτρα στη λίστα «Εγγραφές» (καρτέλα ΑΣ)
+     ΠΩΣ ΜΠΑΙΝΕΙ: αντίγραψε ΟΛΟ αυτό το block και κόλλησέ το στο index.html
+     του repo `tameio` ΑΚΡΙΒΩΣ ΠΡΙΝ από το </body>. Commit → live.
+     Τι κάνει: προσθέτει δύο φίλτρα (Ταμείο + Τύπος έσοδο/έξοδο) πάνω από τη
+     λίστα εγγραφών· φιλτράρει ΑΜΕΣΑ από τα ήδη φορτωμένα δεδομένα — ΧΩΡΙΣ
+     να ξαναφορτώνει τίποτα. Δεν αγγίζει τίποτε άλλο (μόνο ξαναγράφει τη
+     renderEditList ώστε να συμπεριλάβει τα φίλτρα).
+     ═══════════════════════════════════════════════════════════════ -->
+<script>
+(function(){
+  var elFund = '', elKind = '';               // κατάσταση φίλτρων (μένει στη μνήμη μεταξύ re-render)
+  renderEditList = function(){                // ξαναγράφει την υπάρχουσα (function declaration → mutable)
+    var box = document.querySelector('#editList'); if(!box) return;
+    var all  = ((typeof GRID!=='undefined' && GRID.items) || []).slice();
+    var funds = (typeof GRID!=='undefined' && GRID.funds && GRID.funds.length)
+      ? GRID.funds
+      : Array.from(new Set(all.map(function(i){ return i.fund; })));
+    function isOut(it){ return (it.sign<0) || (it.amount<0) || (it.src==='reimb'); }
+    var f = all;
+    if(elFund)            f = f.filter(function(it){ return it.fund===elFund; });
+    if(elKind==='in')     f = f.filter(function(it){ return !isOut(it); });
+    else if(elKind==='out') f = f.filter(function(it){ return isOut(it); });
+    f.sort(function(a,b){ return d10(b.date).localeCompare(d10(a.date)); });
+
+    var optF = '<option value="">Όλα τα ταμεία</option>' + funds.map(function(x){
+      return '<option value="'+esc(x)+'"'+(elFund===x?' selected':'')+'>'+esc(x)+'</option>';
+    }).join('');
+    var bar = '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">'
+      + '<select id="elFund" style="flex:1;min-width:150px;padding:8px 10px;border:1px solid var(--line);border-radius:9px;font-size:14px;font-weight:600;background:#fff">'+optF+'</select>'
+      + '<select id="elKind" style="min-width:150px;padding:8px 10px;border:1px solid var(--line);border-radius:9px;font-size:14px;font-weight:600;background:#fff">'
+        + '<option value=""'+(elKind===''?' selected':'')+'>Έσοδα &amp; Έξοδα</option>'
+        + '<option value="in"'+(elKind==='in'?' selected':'')+'>Μόνο έσοδα</option>'
+        + '<option value="out"'+(elKind==='out'?' selected':'')+'>Μόνο έξοδα</option>'
+      + '</select>'
+      + '<span class="muted small" style="align-self:center">'+f.length+' εγγραφές</span>'
+      + '</div>';
+
+    var rows = !f.length
+      ? '<div class="empty">Καμία εγγραφή για τα φίλτρα.</div>'
+      : f.map(function(it){
+          if(it.src==='in' && it.row){
+            return '<div class="item"><span class="d">'+esc(fmtDate(it.date))+'</span>'
+              + '<span class="l">'+esc(it.fund)+((it.label&&it.label!=='Έσοδο'&&it.label!=='Έσοδο (ειδικό)')?' · '+esc(it.label):'')+'</span>'
+              + '<span class="a '+(it.amount<0?'out':'in')+'">'+(it.amount<0?'':'＋')+eur(it.amount)+'</span>'
+              + '<span class="x" title="Επεξεργασία" onclick="editRow('+it.row+')">✎</span>'
+              + '<span class="x" title="Διαγραφή" onclick="delRow('+it.row+')">✕</span></div>';
+          }
+          return '<div class="item"><span class="d">'+esc(fmtDate(it.date))+'</span>'
+            + '<span class="l">'+esc(it.fund)+' · '+esc(it.label||'Έξοδο')+'</span>'
+            + '<span class="a out">−'+eur(it.amount)+'</span>'
+            + '<span class="x" title="Πώς διορθώνεται το έξοδο" onclick="expenseInfo()">ℹ︎</span></div>';
+        }).join('');
+
+    box.innerHTML = bar + rows;
+    var ff = document.querySelector('#elFund'), fk = document.querySelector('#elKind');
+    if(ff) ff.onchange = function(){ elFund = ff.value; renderEditList(); };
+    if(fk) fk.onchange = function(){ elKind = fk.value; renderEditList(); };
+  };
+  try{ if(typeof GRID!=='undefined' && GRID.items) renderEditList(); }catch(e){}
+})();
+</script>
+
 </body>
 </html>
