@@ -563,8 +563,12 @@ const vc=$('#vChg'); if(vc)vc.onclick=()=>{ showLanding(); };
 
 
 
+
 <!-- ═══════════════════════════════════════════════════════════════
-     ΤΑΜΕΙΟ 76 — patch v19 (αντικαθιστά τα v16, v17, v18)
+     ΤΑΜΕΙΟ 76 — patch v20 (αντικαθιστά τα v16–v19)
+     v20: περιγραφή «Ταμείο Συγκέντρωσης ΑΛ/ΟΠ/ΚΑ» + Άλλο… · έξοδο κρυφό (link μόνο για ΑΣ)
+          · «Καταχωρήθηκε από» υποχρεωτικό · Κινήσεις φορτώνουν από πριν (prefetch)
+          · κελιά πίνακα: (περιγραφή) για ό,τι δεν είναι ταμείο + κλικ → εγγραφές
      ΓΡΗΓΟΡΟ  · cache ανά χρονιά: ανοίγει αμέσως, ανανεώνει στο παρασκήνιο
               · νέα καταχώρηση εμφανίζεται αμέσως στη λίστα
               · edit/διαγραφή αλλάζουν μόνο τη γραμμή (χωρίς reload)
@@ -578,9 +582,9 @@ const vc=$('#vChg'); if(vc)vc.onclick=()=>{ showLanding(); };
      Οθόνες και δυνατότητες ΙΔΙΕΣ — μόνο προσθήκες.
      ═══════════════════════════════════════════════════════════════ -->
 <script>
-/* patch v19 */
+/* patch v20 */
 (function(){
-  var BUILD = 'v19 · 09 October 2026';
+  var BUILD = 'v20 · 18 October 2026';
 
   /* ---------- βοηθητικά ---------- */
   var LS_OK = (function(){ try{ localStorage.setItem('_t','1'); localStorage.removeItem('_t'); return true; }catch(e){ return false; } })();
@@ -604,6 +608,8 @@ const vc=$('#vChg'); if(vc)vc.onclick=()=>{ showLanding(); };
     '.item .x:hover{background:#eef2f7}',
     '.retry{margin-top:10px;background:#1D61AC;color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:700;font-size:14px;cursor:pointer}',
     '.v19ver{font-size:11px;opacity:.75;margin-top:2px}',
+    '.v20ns{display:block;font-size:10.5px;font-weight:600;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px;margin-left:auto}',
+    '#grid td.num{vertical-align:top}',
     '#v19modal{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;z-index:200;padding:16px}',
     '#v19modal .box{background:#fff;border-radius:14px;padding:18px;width:100%;max-width:420px;box-shadow:0 10px 30px rgba(0,0,0,.2)}',
     '#v19modal h3{margin:0 0 6px;font-size:16px}',
@@ -690,6 +696,7 @@ const vc=$('#vChg'); if(vc)vc.onclick=()=>{ showLanding(); };
   loadGrid = async function(opts){
     opts=opts||{};
     var y=curYear(), my=++LOADSEQ, c=getCache(y);
+    if(c && !opts.force && !opts.silent && (Date.now()-c.ts)<60000){ GRID=clone(c.grid); renderGrid(); setStatus('on','Συνδεδεμένο · '+hhmm(c.ts)); return; }
     if(!opts.silent){
       if(c){ GRID=clone(c.grid); renderGrid(); }
       else { $('#totCards').innerHTML=''; $('#editList').innerHTML=''; $('#grid').innerHTML=skel(); }
@@ -744,7 +751,7 @@ const vc=$('#vChg'); if(vc)vc.onclick=()=>{ showLanding(); };
   /* ════════════ 3. ΕΥΚΟΛΙΑ ════════════ */
 
   /* — λίστα εγγραφών με φίλτρα (ταμείο + τύπος) — */
-  var elFund='', elKind='';
+  var elFund='', elKind='', elDate='';
   renderEditList = function(){
     var box=document.querySelector('#editList'); if(!box) return;
     var all=((typeof GRID!=='undefined'&&GRID.items)||[]).slice();
@@ -755,6 +762,7 @@ const vc=$('#vChg'); if(vc)vc.onclick=()=>{ showLanding(); };
     if(elFund) f=f.filter(function(it){ return it.fund===elFund; });
     if(elKind==='in') f=f.filter(function(it){ return !isOut(it); });
     else if(elKind==='out') f=f.filter(function(it){ return isOut(it); });
+    if(elDate) f=f.filter(function(it){ return d10(it.date)===elDate; });
     f.sort(function(a,b){ return d10(b.date).localeCompare(d10(a.date)); });
 
     var optF='<option value="">Όλα τα ταμεία</option>'+funds.map(function(x){
@@ -766,6 +774,7 @@ const vc=$('#vChg'); if(vc)vc.onclick=()=>{ showLanding(); };
         +'<option value="in"'+(elKind==='in'?' selected':'')+'>Μόνο έσοδα</option>'
         +'<option value="out"'+(elKind==='out'?' selected':'')+'>Μόνο έξοδα</option>'
       +'</select>'
+      +(elDate?'<span id="elDateChip" title="Καθαρισμός" style="background:#eef4fc;color:#1D61AC;border-radius:16px;padding:5px 10px;font-size:13px;font-weight:700;cursor:pointer">📅 '+esc(fmtDate(elDate))+' ✕</span>':'')
       +'<span class="muted small" style="align-self:center">'+f.length+' εγγραφές</span></div>';
 
     var rows=!f.length ? '<div class="empty">Καμία εγγραφή για τα φίλτρα.</div>' : f.map(function(it){
@@ -793,6 +802,13 @@ const vc=$('#vChg'); if(vc)vc.onclick=()=>{ showLanding(); };
     var ff=document.querySelector('#elFund'), fk=document.querySelector('#elKind');
     if(ff) ff.onchange=function(){ elFund=ff.value; renderEditList(); };
     if(fk) fk.onchange=function(){ elKind=fk.value; renderEditList(); };
+    var dc=document.querySelector('#elDateChip'); if(dc) dc.onclick=function(){ elDate=''; renderEditList(); };
+  };
+  window.tameioFocus=function(fund,date){
+    elFund=fund; elDate=date; elKind=''; renderEditList();
+    var b=document.querySelector('#editList'); if(!b) return;
+    b.scrollIntoView({behavior:'smooth',block:'start'});
+    b.style.transition='background .6s'; b.style.background='#fff8d6'; setTimeout(function(){ b.style.background=''; },900);
   };
 
   /* — edit σε παράθυρο — */
@@ -907,6 +923,10 @@ const vc=$('#vChg'); if(vc)vc.onclick=()=>{ showLanding(); };
   if(saveBtn && saveBtn.onclick){
     var origSave=saveBtn.onclick;
     saveBtn.onclick=function(ev){
+      if(!$('#fBy').value.trim()){ toast('Συμπλήρωσε «Καταχωρήθηκε από»',true); $('#fBy').focus(); return; }
+      var selEl=document.querySelector('#fNoteSel');
+      if(state.kind==='Έξοδο' && !$('#fNote').value.trim()){ toast('Γράψε περιγραφή εξόδου (π.χ. DEP-012)',true); $('#fNote').focus(); return; }
+      if(selEl && selEl.style.display!=='none' && selEl.value==='__other' && !$('#fNote').value.trim()){ toast('Γράψε περιγραφή',true); $('#fNote').focus(); return; }
       var d=$('#fDate').value;
       if(d){
         var today=iso(new Date()), sy=scoutYear(d), cy=scoutYear(today);
@@ -934,7 +954,103 @@ const vc=$('#vChg'); if(vc)vc.onclick=()=>{ showLanding(); };
       repaint();
     } else if(date) { dropCache(scoutYear(date)); }
     setTimeout(function(){ loadGrid({silent:true}); }, 1500);   /* φέρνει τον αριθμό γραμμής για edit */
+    try{ resetDesc(); }catch(e){}
   };
+
+
+  /* ════════════ v20: απλή καταχώρηση ════════════ */
+  var STD={'Αγέλη':'Ταμείο Συγκέντρωσης ΑΛ','Ομάδα':'Ταμείο Συγκέντρωσης ΟΠ','Κοινότητα':'Ταμείο Συγκέντρωσης ΚΑ'};
+  function isStd(l){ return !l || l==='Έσοδο' || l==='Έσοδο (ειδικό)' || /^Ταμείο( Συγκέντρωσης)?( (ΑΛ|ΟΠ|ΚΑ))?$/.test(String(l).trim()); }
+
+  /* — περιγραφή: προεπιλογή ανά τμήμα + «Άλλο…» — */
+  var noteEl=document.querySelector('#fNote'), sel=null;
+  if(noteEl){
+    var noteLbl=noteEl.previousElementSibling;
+    if(noteLbl && noteLbl.tagName==='LABEL') noteLbl.textContent='Περιγραφή';
+    sel=document.createElement('select'); sel.id='fNoteSel'; sel.style.marginBottom='8px';
+    noteEl.parentNode.insertBefore(sel, noteEl);
+    sel.onchange=function(){ if(sel.value==='__other') noteEl.value=''; refreshDesc(); if(sel.value==='__other') noteEl.focus(); };
+  }
+  function refreshDesc(){
+    if(!noteEl||!sel) return;
+    var out=(state.kind==='Έξοδο'), std=STD[state.addFund];
+    if(out){
+      sel.style.display='none'; noteEl.style.display='';
+      if(isStd(noteEl.value)) noteEl.value='';
+      noteEl.placeholder='π.χ. DEP-012 κατάθεση ή περιγραφή εξόδου'; return;
+    }
+    if(std){
+      var keepOther=(sel.value==='__other');
+      sel.innerHTML='<option value="std">'+esc(std)+'</option><option value="__other">Άλλο…</option>';
+      sel.value=keepOther?'__other':'std'; sel.style.display='';
+      if(sel.value==='std'){ noteEl.value=std; noteEl.style.display='none'; }
+      else { if(isStd(noteEl.value)) noteEl.value=''; noteEl.style.display=''; noteEl.placeholder='Γράψε περιγραφή (π.χ. Escape room — εισπράξεις)'; }
+    } else {
+      sel.style.display='none'; noteEl.style.display='';
+      if(isStd(noteEl.value)) noteEl.value='';
+      noteEl.placeholder='Περιγραφή (π.χ. χορηγία, κέρδος εκδήλωσης)';
+    }
+  }
+  function resetDesc(){ if(sel) sel.value='std'; refreshDesc(); }
+  document.querySelectorAll('#secGrid .secbtn').forEach(function(b){ b.addEventListener('click', function(){ setTimeout(refreshDesc,0); }); });
+  var fo=document.querySelector('#fOther'); if(fo) fo.addEventListener('change', function(){ setTimeout(refreshDesc,0); });
+
+  /* — «Καταχωρήθηκε από» υποχρεωτικό — */
+  var byIn=document.querySelector('#fBy');
+  if(byIn){ byIn.required=true; var bl=byIn.previousElementSibling;
+    if(bl && bl.tagName==='LABEL') bl.innerHTML='Καταχωρήθηκε από <span style="color:#d14343">*</span>'; }
+
+  /* — έξοδο: κρυφό, μικρό link μόνο για τον Αρχηγό — */
+  var kt=document.querySelector('#kindTog');
+  if(kt){ kt.style.display='none'; var kl=kt.previousElementSibling; if(kl && kl.tagName==='LABEL') kl.style.display='none'; }
+  var expLink=document.createElement('div'); expLink.id='v20exp';
+  expLink.style.cssText='margin-top:14px;text-align:center;font-size:13px;display:none';
+  if(saveBtn) saveBtn.parentNode.insertBefore(expLink, saveBtn.nextSibling);
+  function updateExp(){
+    var adm=(typeof isAdmin==='function' && isAdmin()), out=(state.kind==='Έξοδο');
+    if(!adm && out && kt){ var b0=kt.querySelector('[data-k="Έσοδο"]'); if(b0){ b0.click(); out=false; } }
+    expLink.style.display=adm?'':'none';
+    expLink.innerHTML= out ? '<a href="#" style="color:#1D61AC;font-weight:700">← Πίσω σε καταχώρηση εσόδου</a>'
+                           : '<a href="#" style="color:#64748b">− Καταχώρηση εξόδου (μόνο Αρχηγός)</a>';
+    var a=expLink.querySelector('a');
+    if(a) a.onclick=function(e){ e.preventDefault(); var b=kt&&kt.querySelector('[data-k="'+(out?'Έσοδο':'Έξοδο')+'"]'); if(b) b.click(); };
+    if(saveBtn) saveBtn.style.background = out ? '#d14343' : '';
+  }
+  if(kt) kt.querySelectorAll('button').forEach(function(b){ b.addEventListener('click', function(){ setTimeout(function(){ refreshDesc(); updateExp(); },0); }); });
+  if(typeof paintView==='function'){ var origPV=paintView; paintView=function(){ var r=origPV.apply(this,arguments); try{ refreshDesc(); updateExp(); }catch(e){} return r; }; }
+
+  /* — πίνακας: (περιγραφή) για ό,τι δεν είναι ταμείο + κλικ → εγγραφές — */
+  function shortLbl(it){ var l=String(it.label||'Έξοδο'); var i=l.indexOf(' · '); if(i>0) l=l.slice(0,i); return l.length>18?l.slice(0,17)+'…':l; }
+  function decorate(){
+    var grid=document.querySelector('#grid'); if(!grid||typeof GRID==='undefined'||!GRID) return;
+    var iso=(typeof ISO!=='undefined')?ISO:'';
+    var all=GRID.items||[], items=iso?all.filter(function(it){ return it.fund===iso; }):all;
+    var funds=iso?[iso]:(GRID.funds||[]);
+    var dates=Array.from(new Set(items.map(function(it){ return d10(it.date); }))).sort();
+    var rows=grid.querySelectorAll('tr');
+    dates.forEach(function(d,ri){
+      var tr=rows[ri+1]; if(!tr) return;
+      funds.forEach(function(f,ci){
+        var td=tr.children[ci+1]; if(!td) return;
+        var here=items.filter(function(it){ return d10(it.date)===d && it.fund===f; });
+        if(!here.length) return;
+        td.style.cursor='pointer';
+        td.title=here.map(function(it){ var neg=(it.sign<0||it.amount<0); return (neg?'− ':'+ ')+eur(Math.abs(it.amount))+'  '+(it.label||''); }).join('\n')+'\n(κλικ → εγγραφές)';
+        td.onclick=function(){ window.tameioFocus(f,d); };
+        var ns=here.filter(function(it){ return it.src==='reimb' || it.amount<0 || !isStd(it.label); });
+        if(ns.length){ var sp=document.createElement('span'); sp.className='v20ns';
+          sp.textContent='('+shortLbl(ns[0])+(ns.length>1?' +'+(ns.length-1):'')+')'; td.appendChild(sp); }
+      });
+    });
+  }
+  var origRG=renderGrid; renderGrid=function(){ var r=origRG.apply(this,arguments); try{ decorate(); }catch(e){} return r; };
+
+  /* — Κινήσεις: φόρτωση από πριν (prefetch) — */
+  function canLoad(){ return (typeof VIEW!=='undefined') && VIEW && (!(typeof isAdmin==='function' && isAdmin()) || AUTH); }
+  function prefetch(){ var mv=document.querySelector('#pane-moves'); if(canLoad() && (!mv || mv.style.display==='none')) loadGrid({silent:true}); }
+  if(typeof init==='function'){ var origInit=init; init=async function(){ var r=await origInit.apply(this,arguments); try{ refreshDesc(); updateExp(); prefetch(); }catch(e){} return r; }; }
+  (function(){ var n=0, t=setInterval(function(){ n++; if(canLoad()){ clearInterval(t); prefetch(); } else if(n>40) clearInterval(t); },500); })();
+  setTimeout(function(){ try{ refreshDesc(); updateExp(); }catch(e){} },0);
 
   /* — θυμάται το «Καταχωρήθηκε από» — */
   var byEl=document.querySelector('#fBy');
